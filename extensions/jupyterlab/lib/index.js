@@ -10,10 +10,15 @@ class DashIFrameWidget extends widgets_1.Widget {
     /**
      * Construct a new DashIFrameWidget.
      */
-    constructor(port, url) {
+    constructor(port, url, title) {
         super();
         this.id = port;
-        this.title.label = `Dash (port: ${port})`;
+        if (title === "") {
+            this.title.label = `Dash (port: ${port})`;
+        }
+        else {
+            this.title.label = title;
+        }
         this.title.closable = true;
         this.addClass('jp-dashWidget');
         // Add jp-IFrame class to keep drag events from being lost to the iframe
@@ -66,7 +71,7 @@ function registerCommTarget(kernel, widgets, app) {
                 let widget;
                 if (!widgets.has(msgData.port)) {
                     // Create a new widget
-                    widget = new DashIFrameWidget(msgData.port, msgData.url);
+                    widget = new DashIFrameWidget(msgData.port, msgData.url, msgData.title);
                     widget.update();
                     widgets.set(msgData.port, widget);
                     // Add instance tracker stuff
