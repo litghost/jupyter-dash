@@ -42,7 +42,7 @@ class JupyterDash(dash.Dash):
     _token = str(uuid.uuid4())
 
     @classmethod
-    def infer_jupyter_proxy_config(cls):
+    async def infer_jupyter_proxy_config(cls):
         """
         Infer the current Jupyter server configuration. This will detect
         the proper request_pathname_prefix and server_url values to use when
@@ -70,7 +70,7 @@ class JupyterDash(dash.Dash):
             return
         else:
             # Assume classic notebook or JupyterLab
-            _request_jupyter_config()
+            await _request_jupyter_config()
 
     def __init__(self, name=None, server_url=None, **kwargs):
         """"""
