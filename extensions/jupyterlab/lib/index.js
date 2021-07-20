@@ -52,6 +52,12 @@ function activate(app, restorer, notebooks, consoles) {
             let kernel = session.kernel;
             registerCommTarget(kernel, widgets, app);
         });
+        sessionContext.kernelChanged.connect((session, changedKernel) => {
+            let newKernel = changedKernel.oldValue;
+            if (newKernel) {
+                registerCommTarget(newKernel, widgets, app);
+            }
+        });
     });
     // Watch console creation
     consoles.widgetAdded.connect((sender, consolePanel) => {

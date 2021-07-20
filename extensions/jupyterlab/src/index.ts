@@ -89,6 +89,12 @@ function activate(
       let kernel = session.kernel;
       registerCommTarget(kernel, widgets, app);
     })
+    sessionContext.kernelChanged.connect((session, changedKernel) => {
+        let newKernel : Kernel.IKernelConnection = changedKernel.oldValue;
+        if (newKernel) {
+            registerCommTarget(newKernel, widgets, app);
+        }
+    })
   });
 
   // Watch console creation
