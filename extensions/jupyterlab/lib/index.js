@@ -53,10 +53,8 @@ function activate(app, restorer, notebooks, consoles) {
             registerCommTarget(kernel, widgets, app);
         });
         sessionContext.kernelChanged.connect((session, changedKernel) => {
-            let newKernel = changedKernel.oldValue;
-            if (newKernel) {
-                registerCommTarget(newKernel, widgets, app);
-            }
+            let newKernel = changedKernel.newValue;
+            registerCommTarget(newKernel, widgets, app);
         });
     });
     // Watch console creation
@@ -70,7 +68,7 @@ function activate(app, restorer, notebooks, consoles) {
     });
 }
 function registerCommTarget(kernel, widgets, app) {
-    kernel.registerCommTarget('jupyter_dash', (comm, msg) => {
+    kernel === null || kernel === void 0 ? void 0 : kernel.registerCommTarget('jupyter_dash', (comm, msg) => {
         comm.onMsg = (msg) => {
             let msgData = msg.content.data;
             if (msgData.type === 'show') {

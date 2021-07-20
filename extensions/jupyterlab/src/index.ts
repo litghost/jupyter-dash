@@ -90,10 +90,8 @@ function activate(
       registerCommTarget(kernel, widgets, app);
     })
     sessionContext.kernelChanged.connect((session, changedKernel) => {
-        let newKernel : Kernel.IKernelConnection = changedKernel.oldValue;
-        if (newKernel) {
-            registerCommTarget(newKernel, widgets, app);
-        }
+      let newKernel : Kernel.IKernelConnection = changedKernel.newValue;
+      registerCommTarget(newKernel, widgets, app);
     })
   });
 
@@ -113,7 +111,7 @@ function registerCommTarget(
   widgets: Map<string, DashIFrameWidget>,
   app: JupyterFrontEnd
 ) {
-  kernel.registerCommTarget(
+  kernel?.registerCommTarget(
     'jupyter_dash',
     (comm: Kernel.IComm, msg: KernelMessage.ICommOpenMsg) => {
       comm.onMsg = (msg: KernelMessage.ICommMsgMsg) => {
