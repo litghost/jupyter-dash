@@ -1,15 +1,18 @@
+import atexit
 import dash
 import os
 import requests
 from flask import request
+from werkzeug.serving import make_server
 import flask.cli
-from threading import Thread
+from threading import Thread, Event
 from retrying import retry
 import io
 import re
 import sys
 import inspect
 import warnings
+import logging
 
 from IPython import get_ipython
 from IPython.display import IFrame, display
@@ -20,7 +23,7 @@ import uuid
 
 from werkzeug.debug.tbtools import get_current_traceback
 
-from .comms import _dash_comm, _jupyter_config, _request_jupyter_config
+from .comms import dash_send, get_jupyter_config, _request_jupyter_config
 
 
 class JupyterDash(dash.Dash):
@@ -106,15 +109,16 @@ class JupyterDash(dash.Dash):
 
         self._traceback = None
 
-        if ('base_subpath' in _jupyter_config and self._server_proxy and
+        jupyter_config = get_jupyter_config()
+        if ('base_subpath' in jupyter_config and self._server_proxy and
                 JupyterDash.default_requests_pathname_prefix is None):
             JupyterDash.default_requests_pathname_prefix = (
-                _jupyter_config['base_subpath'].rstrip('/') + '/proxy/{port}/'
+                jupyter_config['base_subpath'].rstrip('/') + '/proxy/{port}/'
             )
 
-        if ('server_url' in _jupyter_config and self._server_proxy and
+        if ('server_url' in jupyter_config and self._server_proxy and
                 JupyterDash.default_server_url is None):
-            JupyterDash.default_server_url = _jupyter_config['server_url']
+            JupyterDash.default_server_url = jupyter_config['server_url']
 
         self._input_pathname_prefix = kwargs.get('requests_pathname_prefix', None)
 
@@ -129,14 +133,16 @@ class JupyterDash(dash.Dash):
             server_url = None
 
         self.server_url = server_url
+        self.shutdown_event = Event()
+        atexit.register(lambda: self.shutdown_from_other_thread())
+
+        self.thread = None
+        self.shutdown_thread = None
 
         # Register route to shut down server
         @self.server.route('/_shutdown_' + JupyterDash._token, methods=['GET'])
         def shutdown():
-            func = request.environ.get('werkzeug.server.shutdown')
-            if func is None:
-                raise RuntimeError('Not running with the Werkzeug Server')
-            func()
+            self.shutdown_event.set()
             return 'Server shutting down...'
 
         # Register route that we can use to poll to see when server is running
@@ -145,6 +151,16 @@ class JupyterDash(dash.Dash):
             return 'Alive'
 
         self.server.logger.disabled = True
+
+    def shutdown_from_other_thread(self):
+        self.shutdown_event.set()
+        self.shutdown_thread.join()
+        self.shutdown_event.clear()
+        self.thread = None
+        self.shutdown_thread = None
+
+    def __del__(self):
+        self.shutdown_from_other_thread()
 
     def run_server(
             self,
@@ -217,6 +233,10 @@ class JupyterDash(dash.Dash):
         if inline_exceptions is None:
             inline_exceptions = mode == "inline"
 
+        # Stop server if already running
+        if self.thread:
+            self.shutdown_from_other_thread()
+
         # Terminate any existing server using this port
         self._terminate_server_for_port(host, port)
 
@@ -281,17 +301,32 @@ class JupyterDash(dash.Dash):
             inline_exceptions=inline_exceptions,
         )
 
+        # Changing logging level to WARNING (instead of INFO).
+        logger = logging.getLogger("werkzeug")
+        logger.setLevel(logging.WARNING)
+
+        http_server = make_server(host, port, self.server)
+
         @retry(
             stop_max_attempt_number=15,
             wait_exponential_multiplier=100,
             wait_exponential_max=1000
         )
         def run():
-            super_run_server(**kwargs)
+            http_server.serve_forever()
 
-        thread = Thread(target=run)
-        thread.setDaemon(True)
-        thread.start()
+        self.thread = Thread(target=run)
+        self.thread.setDaemon(True)
+        self.thread.start()
+
+        def shutdown():
+            self.shutdown_event.wait()
+            http_server.shutdown()
+            self.thread.join()
+
+        self.shutdown_thread = Thread(target=shutdown)
+        self.shutdown_thread.setDaemon(True)
+        self.shutdown_thread.start()
 
         # Wait for server to start up
         alive_url = "http://{host}:{port}/_alive_{token}".format(
@@ -345,7 +380,7 @@ class JupyterDash(dash.Dash):
             ))
         elif mode == 'jupyterlab':
             # Update front-end extension
-            _dash_comm.send({
+            dash_send({
                 'type': 'show',
                 'port': port,
                 'url': dashboard_url,
