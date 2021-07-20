@@ -24,7 +24,7 @@ async def _get_jupyter_config():
 # This task will be complete once __jupyter_config is populated.
 __jupyter_config_task = asyncio.create_task(_get_jupyter_config())
     
-async def _request_jupyter_config(timeout=5):
+async def _request_jupyter_config(timeout=1):
     """ Attempt to complete task to retrieve jupyter config.
 
     This coroutine will timeout after arg timeout seconds.
@@ -38,7 +38,10 @@ async def _request_jupyter_config(timeout=5):
         # Not in jupyter setting
         return
 
-    await asyncio.wait_for(asyncio.shield(__jupyter_config_task), timeout=timeout)
+    try:
+        await asyncio.wait_for(asyncio.shield(__jupyter_config_task), timeout=timeout)
+    except asyncio.TimeoutError:
+        raise RuntimeException('Jupyter config not ready, re-run "await JupyterDash.infer_jupyter_proxy_config()"')
 
 def get_jupyter_config():
     global __jupyter_config
@@ -47,7 +50,7 @@ def get_jupyter_config():
         return {}
 
     if not __jupyter_config_future.done():
-        raise RuntimeException('Jupyter config not ready, need to "await JupyterDash.infer_jupyter_proxy_config()"')
+        raise RuntimeException('Jupyter config not ready, re-run "await JupyterDash.infer_jupyter_proxy_config()"')
 
     return __jupyter_config
 
