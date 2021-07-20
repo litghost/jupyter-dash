@@ -24,7 +24,7 @@ async def _get_jupyter_config():
 # This task will be complete once __jupyter_config is populated.
 __jupyter_config_task = asyncio.create_task(_get_jupyter_config())
     
-async def _request_jupyter_config(timeout=2):
+async def _request_jupyter_config(timeout=5):
     """ Attempt to complete task to retrieve jupyter config.
 
     This coroutine will timeout after arg timeout seconds.
