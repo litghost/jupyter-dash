@@ -23,7 +23,7 @@ import uuid
 
 from werkzeug.debug.tbtools import get_current_traceback
 
-from .comms import dash_send, get_jupyter_config, _request_jupyter_config
+from jupyter_dash.comms import dash_send, get_jupyter_config, _request_jupyter_config
 
 
 class JupyterDash(dash.Dash):
@@ -35,7 +35,8 @@ class JupyterDash(dash.Dash):
 
     See parent docstring for additional parameters
     """
-    default_mode = 'external'
+
+    default_mode = "external"
     default_requests_pathname_prefix = os.environ.get(
         "DASH_REQUESTS_PATHNAME_PREFIX", None
     )
@@ -80,9 +81,9 @@ class JupyterDash(dash.Dash):
         # Strip unsupported properties and warn
         if JupyterDash._in_colab:
             unsupported_colab_props = [
-                'requests_pathname_prefix',
-                'routes_pathname_prefix',
-                'url_base_pathname'
+                "requests_pathname_prefix",
+                "routes_pathname_prefix",
+                "url_base_pathname",
             ]
             for prop in unsupported_colab_props:
                 if prop in kwargs:
@@ -103,6 +104,9 @@ class JupyterDash(dash.Dash):
         # See if jupyter_server_proxy is installed
         try:
             import jupyter_server_proxy
+
+            _ = jupyter_server_proxy
+
             self._server_proxy = True
         except Exception:
             self._server_proxy = False
@@ -110,24 +114,30 @@ class JupyterDash(dash.Dash):
         self._traceback = None
 
         jupyter_config = get_jupyter_config()
-        if ('base_subpath' in jupyter_config and self._server_proxy and
-                JupyterDash.default_requests_pathname_prefix is None):
+        if (
+            "base_subpath" in jupyter_config
+            and self._server_proxy
+            and JupyterDash.default_requests_pathname_prefix is None
+        ):
             JupyterDash.default_requests_pathname_prefix = (
-                jupyter_config['base_subpath'].rstrip('/') + '/proxy/{port}/'
+                jupyter_config["base_subpath"].rstrip("/") + "/proxy/{port}/"
             )
 
-        if ('server_url' in jupyter_config and self._server_proxy and
-                JupyterDash.default_server_url is None):
-            JupyterDash.default_server_url = jupyter_config['server_url']
+        if (
+            "server_url" in jupyter_config
+            and self._server_proxy
+            and JupyterDash.default_server_url is None
+        ):
+            JupyterDash.default_server_url = jupyter_config["server_url"]
 
-        self._input_pathname_prefix = kwargs.get('requests_pathname_prefix', None)
+        self._input_pathname_prefix = kwargs.get("requests_pathname_prefix", None)
 
         # Infer server_url
         if server_url is None:
-            domain_base = os.environ.get('DASH_DOMAIN_BASE', None)
+            domain_base = os.environ.get("DASH_DOMAIN_BASE", None)
             if domain_base:
                 # Dash Enterprise sets DASH_DOMAIN_BASE environment variable
-                server_url = 'https://' + domain_base
+                server_url = "https://" + domain_base
         elif JupyterDash._in_colab:
             warnings.warn("The server_url argument is ignored when running in Colab")
             server_url = None
@@ -140,15 +150,15 @@ class JupyterDash(dash.Dash):
         self.shutdown_thread = None
 
         # Register route to shut down server
-        @self.server.route('/_shutdown_' + JupyterDash._token, methods=['GET'])
+        @self.server.route("/_shutdown_" + JupyterDash._token, methods=["GET"])
         def shutdown():
             self.shutdown_event.set()
-            return 'Server shutting down...'
+            return "Server shutting down..."
 
         # Register route that we can use to poll to see when server is running
-        @self.server.route('/_alive_' + JupyterDash._token, methods=['GET'])
+        @self.server.route("/_alive_" + JupyterDash._token, methods=["GET"])
         def alive():
-            return 'Alive'
+            return "Alive"
 
         self.server.logger.disabled = True
 
@@ -163,10 +173,13 @@ class JupyterDash(dash.Dash):
         self.shutdown_from_other_thread()
 
     def run_server(
-            self,
-            mode=None, width="100%", height=650, inline_exceptions=None,
-            jupyterlab_title="",
-            **kwargs
+        self,
+        mode=None,
+        width="100%",
+        height=650,
+        inline_exceptions=None,
+        jupyterlab_title="",
+        **kwargs
     ):
         """
         Serve the app using flask in a background thread. You should not run this on a
@@ -197,12 +210,31 @@ class JupyterDash(dash.Dash):
             super_run_server(**kwargs)
             return
 
+        # Stop server if already running
+        if self.thread:
+            self.shutdown_from_other_thread()
+
         # Get host and port
         host = kwargs.get("host", os.getenv("HOST", "127.0.0.1"))
-        port = kwargs.get("port", os.getenv("PORT", "8050"))
+        port = kwargs.get("port", os.getenv("PORT", 0))
 
-        kwargs['host'] = host
-        kwargs['port'] = port
+        # Terminate any existing server using this port
+        if port != 0:
+            self._terminate_server_for_port(host, port)
+
+        kwargs["host"] = host
+        kwargs["port"] = port
+
+        # Changing logging level to WARNING (instead of INFO).
+        logger = logging.getLogger("werkzeug")
+        logger.setLevel(logging.WARNING)
+
+        # Make server
+        http_server = make_server(host, port, self.server)
+
+        # Pull port from actual server, useful it port == 0.
+        port = http_server.port
+        kwargs["port"] = port
 
         # Validate / infer display mode
         if JupyterDash._in_colab:
@@ -233,84 +265,71 @@ class JupyterDash(dash.Dash):
         if inline_exceptions is None:
             inline_exceptions = mode == "inline"
 
-        # Stop server if already running
-        if self.thread:
-            self.shutdown_from_other_thread()
-
-        # Terminate any existing server using this port
-        self._terminate_server_for_port(host, port)
-
         # Configure pathname prefix
-        requests_pathname_prefix = self.config.get('requests_pathname_prefix', None)
+        requests_pathname_prefix = self.config.get("requests_pathname_prefix", None)
         if self._input_pathname_prefix is None:
             requests_pathname_prefix = self.default_requests_pathname_prefix
 
         if requests_pathname_prefix is not None:
             requests_pathname_prefix = requests_pathname_prefix.format(port=port)
         else:
-            requests_pathname_prefix = '/'
-        self.config.update({'requests_pathname_prefix': requests_pathname_prefix})
+            requests_pathname_prefix = "/"
+        self.config.update({"requests_pathname_prefix": requests_pathname_prefix})
 
         # Compute server_url url
         if self.server_url is None:
             if JupyterDash.default_server_url:
-                server_url = JupyterDash.default_server_url.rstrip('/')
+                server_url = JupyterDash.default_server_url.rstrip("/")
             else:
-                server_url = 'http://{host}:{port}'.format(host=host, port=port)
+                server_url = "http://{host}:{port}".format(host=host, port=port)
         else:
-            server_url = self.server_url.rstrip('/')
+            server_url = self.server_url.rstrip("/")
 
         dashboard_url = "{server_url}{requests_pathname_prefix}".format(
             server_url=server_url, requests_pathname_prefix=requests_pathname_prefix
         )
 
         # Default the global "debug" flag to True
-        debug = kwargs.get('debug', True)
+        debug = kwargs.get("debug", True)
 
         # Disable debug flag when calling superclass because it doesn't work
         # in notebook
-        kwargs['debug'] = False
+        kwargs["debug"] = False
 
         # Enable supported dev tools
         if debug:
             for k in [
-                'dev_tools_silence_routes_logging',
-                'dev_tools_props_check',
-                'dev_tools_serve_dev_bundles',
-                'dev_tools_prune_errors'
+                "dev_tools_silence_routes_logging",
+                "dev_tools_props_check",
+                "dev_tools_serve_dev_bundles",
+                "dev_tools_prune_errors",
             ]:
                 if k not in kwargs:
                     kwargs[k] = True
 
             # Enable dev tools by default unless app is displayed inline
-            if 'dev_tools_ui' not in kwargs:
-                kwargs['dev_tools_ui'] = mode != "inline"
+            if "dev_tools_ui" not in kwargs:
+                kwargs["dev_tools_ui"] = mode != "inline"
 
-            if 'dev_tools_hot_reload' not in kwargs:
+            if "dev_tools_hot_reload" not in kwargs:
                 # Enable hot-reload by default in "external" mode. Enabling in inline or
                 # in JupyterLab extension seems to cause Jupyter problems sometimes when
                 # there is no active kernel.
-                kwargs['dev_tools_hot_reload'] = mode == "external"
+                kwargs["dev_tools_hot_reload"] = mode == "external"
 
         # suppress warning banner printed to standard out
         flask.cli.show_server_banner = lambda *args, **kwargs: None
 
         # Set up custom callback exception handling
         self._config_callback_exception_handling(
-            dev_tools_prune_errors=kwargs.get('dev_tools_prune_errors', True),
+            dev_tools_prune_errors=kwargs.get("dev_tools_prune_errors", True),
             inline_exceptions=inline_exceptions,
         )
-
-        # Changing logging level to WARNING (instead of INFO).
-        logger = logging.getLogger("werkzeug")
-        logger.setLevel(logging.WARNING)
-
-        http_server = make_server(host, port, self.server)
 
         @retry(
             stop_max_attempt_number=15,
             wait_exponential_multiplier=100,
-            wait_exponential_max=1000
+            wait_exponential_max=1000,
         )
         def run():
             http_server.serve_forever()
@@ -337,7 +356,7 @@ class JupyterDash(dash.Dash):
         @retry(
             stop_max_attempt_number=15,
             wait_exponential_multiplier=10,
-            wait_exponential_max=1000
+            wait_exponential_max=1000,
         )
         def wait_for_app():
             res = requests.get(alive_url).content.decode()
@@ -347,9 +366,7 @@ class JupyterDash(dash.Dash):
                 )
                 raise OSError(
                     "Address '{url}' already in use.\n"
-                    "    Try passing a different port to run_server.".format(
-                        url=url
-                    )
+                    "    Try passing a different port to run_server.".format(url=url)
                 )
 
         wait_for_app()
@@ -357,40 +374,46 @@ class JupyterDash(dash.Dash):
         if JupyterDash._in_colab:
             self._display_in_colab(dashboard_url, port, mode, width, height)
         else:
-            self._display_in_jupyter(dashboard_url, port, mode, width, height,
-                                     jupyterlab_title)
+            self._display_in_jupyter(
+                dashboard_url, port, mode, width, height, jupyterlab_title
+            )
 
     def _display_in_colab(self, dashboard_url, port, mode, width, height):
         from google.colab import output
-        if mode == 'inline':
+
+        if mode == "inline":
             output.serve_kernel_port_as_iframe(port, width=width, height=height)
-        elif mode == 'external':
+        elif mode == "external":
             # Display a hyperlink that can be clicked to open Dashboard
             print("Dash app running on:")
             output.serve_kernel_port_as_window(port, anchor_text=dashboard_url)
 
-    def _display_in_jupyter(self, dashboard_url, port, mode, width, height,
-                            jupyterlab_title=''):
-        if mode == 'inline':
+    def _display_in_jupyter(
+        self, dashboard_url, port, mode, width, height, jupyterlab_title=""
+    ):
+        if mode == "inline":
             display(IFrame(dashboard_url, width, height))
-        elif mode == 'external':
+        elif mode == "external":
             # Display a hyperlink that can be clicked to open Dashboard
-            print("Dash app running on {dashboard_url}".format(
-                dashboard_url=dashboard_url
-            ))
-        elif mode == 'jupyterlab':
+            print(
+                "Dash app running on {dashboard_url}".format(
+                    dashboard_url=dashboard_url
+                )
+            )
+        elif mode == "jupyterlab":
             # Update front-end extension
-            dash_send({
-                'type': 'show',
-                'port': port,
-                'url': dashboard_url,
-                'title': jupyterlab_title,
-            })
+            dash_send(
+                {
+                    "type": "show",
+                    "port": port,
+                    "url": dashboard_url,
+                    "title": jupyterlab_title,
+                }
+            )
 
     def _config_callback_exception_handling(
-            self, dev_tools_prune_errors, inline_exceptions
+        self, dev_tools_prune_errors, inline_exceptions
     ):
-
         @self.server.errorhandler(Exception)
         def _wrap_errors(_):
             """Install traceback handling for callbacks"""
@@ -418,7 +441,7 @@ class JupyterDash(dash.Dash):
                     mode="Verbose",
                     color_scheme="Linux",
                     include_vars=True,
-                    ostream=ostream
+                    ostream=ostream,
                 )
                 ipytb()
             finally:
@@ -438,8 +461,7 @@ class JupyterDash(dash.Dash):
             # Set width to fit 75-character wide stack trace and font to a size the
             # won't require a horizontal scroll bar
             html_str = html_str.replace(
-                '<html>',
-                '<html style="width: 75ch; font-size: 0.86em">'
+                "<html>", '<html style="width: 75ch; font-size: 0.86em">'
             )
 
             # Remove explicit background color so Dash dev-tools can set background
@@ -455,22 +477,28 @@ class JupyterDash(dash.Dash):
         )
         try:
             response = requests.get(shutdown_url)
-        except Exception as e:
+            _ = response
+        except Exception:
             pass
 
 
 def _custom_formatargvalues(
-        args, varargs, varkw, locals,
-        formatarg=str,
-        formatvarargs=lambda name: '*' + name,
-        formatvarkw=lambda name: '**' + name,
-        formatvalue=lambda value: '=' + repr(value)):
+    args,
+    varargs,
+    varkw,
+    locals,
+    formatarg=str,
+    formatvarargs=lambda name: "*" + name,
+    formatvarkw=lambda name: "**" + name,
+    formatvalue=lambda value: "=" + repr(value),
+):
 
     """Copied from inspect.formatargvalues, modified to place function
     arguments on separate lines"""
-    def convert(name, locals=locals,
-                formatarg=formatarg, formatvalue=formatvalue):
+
+    def convert(name, locals=locals, formatarg=formatarg, formatvalue=formatvalue):
         return formatarg(name) + formatvalue(locals[name])
+
     specs = []
     for i in range(len(args)):
         specs.append(convert(args[i]))
@@ -479,10 +507,10 @@ def _custom_formatargvalues(
     if varkw:
         specs.append(formatvarkw(varkw) + formatvalue(locals[varkw]))
 
-    result = '(' + ', '.join(specs) + ')'
+    result = "(" + ", ".join(specs) + ")"
 
     if len(result) < 40:
         return result
     else:
         # Put each arg on a separate line
-        return '(\n    ' + ',\n    '.join(specs) + '\n)'
+        return "(\n    " + ",\n    ".join(specs) + "\n)"
