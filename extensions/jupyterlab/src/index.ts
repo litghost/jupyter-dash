@@ -111,9 +111,11 @@ function registerCommTarget(
   widgets: Map<string, DashIFrameWidget>,
   app: JupyterFrontEnd
 ) {
+  console.log("Comm registered");
   kernel?.registerCommTarget(
     'jupyter_dash',
     (comm: Kernel.IComm, msg: KernelMessage.ICommOpenMsg) => {
+      console.log("Comm openned");
       comm.onMsg = (msg: KernelMessage.ICommMsgMsg) => {
         let msgData = (msg.content.data as unknown) as DashMessageData;
         if (msgData.type === 'show') {
@@ -146,6 +148,7 @@ function registerCommTarget(
           // Activate the widget
           app.shell.activateById(widget.id);
         } else if (msgData.type === 'base_url_request_ajax') {
+          console.log("AJAX request received!");
           // Rather than use IPython Comm, send base URL data via AJAX request to 
           // temporary proxy.
 
@@ -165,6 +168,8 @@ function registerCommTarget(
             frontend: "jupyterlab",
           }
           req.send(JSON.stringify(response));
+
+          console.log("AJAX request sent!");
         } else if (msgData.type === 'base_url_request') {
 
           // Build server url and base subpath.
