@@ -68,9 +68,7 @@ function activate(app, restorer, notebooks, consoles) {
     });
 }
 function registerCommTarget(kernel, widgets, app) {
-    console.log("Comm registered");
     kernel === null || kernel === void 0 ? void 0 : kernel.registerCommTarget('jupyter_dash', (comm, msg) => {
-        console.log("Comm openned");
         comm.onMsg = (msg) => {
             let msgData = msg.content.data;
             if (msgData.type === 'show') {
@@ -102,7 +100,6 @@ function registerCommTarget(kernel, widgets, app) {
                 app.shell.activateById(widget.id);
             }
             else if (msgData.type === 'base_url_request_ajax') {
-                console.log("AJAX request received!");
                 // Rather than use IPython Comm, send base URL data via AJAX request to 
                 // temporary proxy.
                 // Build server url and base subpath.
@@ -120,7 +117,6 @@ function registerCommTarget(kernel, widgets, app) {
                     frontend: "jupyterlab",
                 };
                 req.send(JSON.stringify(response));
-                console.log("AJAX request sent!");
             }
             else if (msgData.type === 'base_url_request') {
                 // Build server url and base subpath.
