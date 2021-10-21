@@ -145,6 +145,26 @@ function registerCommTarget(
 
           // Activate the widget
           app.shell.activateById(widget.id);
+        } else if (msgData.type === 'base_url_request_ajax') {
+          // Rather than use IPython Comm, send base URL data via AJAX request to 
+          // temporary proxy.
+
+          // Build server url and base subpath.
+          const baseUrl = PageConfig.getBaseUrl();
+          const baseSubpath = PageConfig.getOption('baseUrl');
+          const n = baseUrl.lastIndexOf(baseSubpath)
+          const serverUrl = baseUrl.slice(0, n)
+
+          const req = new XMLHttpRequest();
+          req.open("POST", baseSubpath + "proxy/" + msgData.port + "/")
+          req.setRequestHeader("Content-Type", "application/json");
+          const response = {
+            type: 'base_url_response',
+            server_url: serverUrl,
+            base_subpath: baseSubpath,
+            frontend: "jupyterlab",
+          }
+          req.send(JSON.stringify(response));
         } else if (msgData.type === 'base_url_request') {
 
           // Build server url and base subpath.
