@@ -114,8 +114,10 @@ function registerCommTarget(
   kernel?.registerCommTarget(
     'jupyter_dash',
     (comm: Kernel.IComm, msg: KernelMessage.ICommOpenMsg) => {
+      console.log("Comm open!");
       comm.onMsg = (msg: KernelMessage.ICommMsgMsg) => {
         let msgData = (msg.content.data as unknown) as DashMessageData;
+        console.log("Message received!");
         if (msgData.type === 'show') {
           let widget: DashIFrameWidget;
           if (!widgets.has(msgData.port)) {

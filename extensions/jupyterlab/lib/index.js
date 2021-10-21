@@ -69,8 +69,10 @@ function activate(app, restorer, notebooks, consoles) {
 }
 function registerCommTarget(kernel, widgets, app) {
     kernel === null || kernel === void 0 ? void 0 : kernel.registerCommTarget('jupyter_dash', (comm, msg) => {
+        console.log("Comm open!");
         comm.onMsg = (msg) => {
             let msgData = msg.content.data;
+            console.log("Message received!");
             if (msgData.type === 'show') {
                 let widget;
                 if (!widgets.has(msgData.port)) {
